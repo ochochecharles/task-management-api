@@ -4,6 +4,7 @@ FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
 COPY go.mod go.sum ./
+RUN apk add --no-cache git
 RUN go env -w GOPROXY=direct
 RUN go mod download
 
