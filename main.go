@@ -72,6 +72,8 @@ func main() {
 
 		r.Post("/projects/{id}/members", projectHandler.AddMember)
 		r.Delete("/projects/{id}/members/{userID}", projectHandler.RemoveMember)
+		r.Get("/projects/{id}/members", projectHandler.ListMembers)
+		r.Get("/projects/{id}/members/{userID}", projectHandler.GetMember)
 
 		r.Post("/projects/{id}/tasks", taskHandler.CreateTask)
 		r.Get("/projects/{id}/tasks", taskHandler.ListTasks)

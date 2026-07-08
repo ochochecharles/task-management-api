@@ -230,3 +230,62 @@ func (h *ProjectHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *ProjectHandler) GetMember(w http.ResponseWriter, r *http.Request) {
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid project id", http.StatusBadRequest)
+		return
+	}
+
+	memberID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	member, err := h.queries.GetProjectMember(r.Context(), db.GetProjectMemberParams{
+		ProjectID: projectID,
+		UserID:    memberID,
+	})
+	if err != nil {
+		http.Error(w, "member not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ProjectMemberResponse{
+		ProjectID: member.ProjectID,
+		UserID:    member.UserID,
+		Role:      member.Role,
+		JoinedAt:  member.JoinedAt,
+	})
+}
+
+func (h *ProjectHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid project id", http.StatusBadRequest)
+		return
+	}
+
+	members, err := h.queries.ListProjectMembers(r.Context(), projectID)
+	if err != nil {
+		slog.Error("failed to list members", "error", err)
+		http.Error(w, "failed to list members", http.StatusInternalServerError)
+		return
+	}
+
+	response := make([]ProjectMemberResponse, len(members))
+	for i, m := range members {
+		response[i] = ProjectMemberResponse{
+			ProjectID: m.ProjectID,
+			UserID:    m.UserID,
+			Role:      m.Role,
+			JoinedAt:  m.JoinedAt,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
