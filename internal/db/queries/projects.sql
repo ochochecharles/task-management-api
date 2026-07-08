@@ -27,12 +27,16 @@ INSERT INTO project_members (project_id, user_id, role)
 VALUES ($1, $2, $3);
 
 -- name: GetProjectMember :one
-SELECT * FROM project_members
-WHERE project_id = $1 AND user_id = $2;
+SELECT pm.project_id, pm.user_id, pm.role, pm.joined_at, u.email, u.name
+FROM project_members pm
+INNER JOIN users u ON u.id = pm.user_id
+WHERE pm.project_id = $1 AND pm.user_id = $2;
 
 -- name: ListProjectMembers :many
-SELECT * FROM project_members
-WHERE project_id = $1;
+SELECT pm.project_id, pm.user_id, pm.role, pm.joined_at, u.email, u.name
+FROM project_members pm
+INNER JOIN users u ON u.id = pm.user_id
+WHERE pm.project_id = $1;
 
 -- name: RemoveProjectMember :exec
 DELETE FROM project_members

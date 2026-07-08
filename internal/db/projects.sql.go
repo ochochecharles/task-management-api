@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -94,8 +95,10 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 }
 
 const getProjectMember = `-- name: GetProjectMember :one
-SELECT project_id, user_id, role, joined_at FROM project_members
-WHERE project_id = $1 AND user_id = $2
+SELECT pm.project_id, pm.user_id, pm.role, pm.joined_at, u.email, u.name
+FROM project_members pm
+INNER JOIN users u ON u.id = pm.user_id
+WHERE pm.project_id = $1 AND pm.user_id = $2
 `
 
 type GetProjectMemberParams struct {
@@ -103,37 +106,61 @@ type GetProjectMemberParams struct {
 	UserID    uuid.UUID
 }
 
-func (q *Queries) GetProjectMember(ctx context.Context, arg GetProjectMemberParams) (ProjectMember, error) {
+type GetProjectMemberRow struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+	JoinedAt  time.Time
+	Email     string
+	Name      string
+}
+
+func (q *Queries) GetProjectMember(ctx context.Context, arg GetProjectMemberParams) (GetProjectMemberRow, error) {
 	row := q.db.QueryRowContext(ctx, getProjectMember, arg.ProjectID, arg.UserID)
-	var i ProjectMember
+	var i GetProjectMemberRow
 	err := row.Scan(
 		&i.ProjectID,
 		&i.UserID,
 		&i.Role,
 		&i.JoinedAt,
+		&i.Email,
+		&i.Name,
 	)
 	return i, err
 }
 
 const listProjectMembers = `-- name: ListProjectMembers :many
-SELECT project_id, user_id, role, joined_at FROM project_members
-WHERE project_id = $1
+SELECT pm.project_id, pm.user_id, pm.role, pm.joined_at, u.email, u.name
+FROM project_members pm
+INNER JOIN users u ON u.id = pm.user_id
+WHERE pm.project_id = $1
 `
 
-func (q *Queries) ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ProjectMember, error) {
+type ListProjectMembersRow struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+	JoinedAt  time.Time
+	Email     string
+	Name      string
+}
+
+func (q *Queries) ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProjectMembers, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ProjectMember
+	var items []ListProjectMembersRow
 	for rows.Next() {
-		var i ProjectMember
+		var i ListProjectMembersRow
 		if err := rows.Scan(
 			&i.ProjectID,
 			&i.UserID,
 			&i.Role,
 			&i.JoinedAt,
+			&i.Email,
+			&i.Name,
 		); err != nil {
 			return nil, err
 		}

@@ -174,8 +174,8 @@ func (h *ProjectHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		UserID string `json:"user_id"`
-		Role   string `json:"role"`
+		Email string `json:"email"`
+		Role  string `json:"role"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -183,9 +183,8 @@ func (h *ProjectHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	memberID, err := uuid.Parse(body.UserID)
-	if err != nil {
-		http.Error(w, "invalid user id", http.StatusBadRequest)
+	if body.Email == "" {
+		http.Error(w, "email is required", http.StatusBadRequest)
 		return
 	}
 
@@ -193,9 +192,16 @@ func (h *ProjectHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 		body.Role = "member"
 	}
 
+	// look up user by email
+	user, err := h.queries.GetUserByEmail(r.Context(), body.Email)
+	if err != nil {
+		http.Error(w, "no user found with that email", http.StatusNotFound)
+		return
+	}
+
 	if err := h.queries.AddProjectMember(r.Context(), db.AddProjectMemberParams{
 		ProjectID: projectID,
-		UserID:    memberID,
+		UserID:    user.ID,
 		Role:      body.Role,
 	}); err != nil {
 		slog.Error("failed to add member", "error", err)
@@ -257,6 +263,8 @@ func (h *ProjectHandler) GetMember(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ProjectMemberResponse{
 		ProjectID: member.ProjectID,
 		UserID:    member.UserID,
+		Name:      member.Name,
+		Email:     member.Email,
 		Role:      member.Role,
 		JoinedAt:  member.JoinedAt,
 	})
@@ -281,6 +289,8 @@ func (h *ProjectHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 		response[i] = ProjectMemberResponse{
 			ProjectID: m.ProjectID,
 			UserID:    m.UserID,
+			Name:      m.Name,
+			Email:     m.Email,
 			Role:      m.Role,
 			JoinedAt:  m.JoinedAt,
 		}

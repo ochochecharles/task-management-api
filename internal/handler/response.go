@@ -29,6 +29,8 @@ type ProjectResponse struct {
 type ProjectMemberResponse struct {
 	ProjectID uuid.UUID `json:"project_id"`
 	UserID    uuid.UUID `json:"user_id"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
 	Role      string    `json:"role"`
 	JoinedAt  time.Time `json:"joined_at"`
 }
