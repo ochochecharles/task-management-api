@@ -118,8 +118,9 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	frontendURL := os.Getenv("FRONTEND_URL")
 	w.Header().Set("Content-Type", "application/json")
-	http.Redirect(w, r, frontendURL+"/auth/callback?token="+tokenString, http.StatusTemporaryRedirect)
 	// json.NewEncoder(w).Encode(map[string]string{
 	// 	"token": tokenString,
 	// })
+	http.Redirect(w, r, frontendURL+"/auth/callback?token="+tokenString, http.StatusTemporaryRedirect)
+	
 }

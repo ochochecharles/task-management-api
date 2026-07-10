@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/lib/pq"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/ochochecharles/task-management-api/internal/db"
@@ -204,6 +205,10 @@ func (h *ProjectHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 		UserID:    user.ID,
 		Role:      body.Role,
 	}); err != nil {
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			http.Error(w, "user is already a member of this project", http.StatusConflict)
+			return
+		}
 		slog.Error("failed to add member", "error", err)
 		http.Error(w, "failed to add member", http.StatusInternalServerError)
 		return
