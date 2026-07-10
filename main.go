@@ -40,6 +40,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(queries)
 	projectHandler := handler.NewProjectHandler(queries)
 	taskHandler := handler.NewTaskHandler(queries)
+	userHandler := handler.NewUserHandler(queries)
 
 	r := chi.NewRouter()
 
@@ -80,6 +81,8 @@ func main() {
 		r.Get("/projects/{id}/tasks/{taskID}", taskHandler.GetTask)
 		r.Put("/projects/{id}/tasks/{taskID}", taskHandler.UpdateTask)
 		r.Delete("/projects/{id}/tasks/{taskID}", taskHandler.DeleteTask)
+
+		r.Delete("/users/me", userHandler.DeleteUser)
 	})
 
 	port := os.Getenv("PORT")
