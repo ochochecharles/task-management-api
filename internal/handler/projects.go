@@ -214,7 +214,26 @@ func (h *ProjectHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	member, err := h.queries.GetProjectMember(r.Context(), db.GetProjectMemberParams{
+		ProjectID: projectID,
+		UserID:    user.ID,
+	})
+	if err != nil {
+		slog.Error("failed to fetch added member", "error", err)
+		http.Error(w, "failed to fetch added member", http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(ProjectMemberResponse{
+		ProjectID: member.ProjectID,
+		UserID:    member.UserID,
+		Name:      member.Name,
+		Email:     member.Email,
+		Role:      member.Role,
+		JoinedAt:  member.JoinedAt,
+	})
 }
 
 func (h *ProjectHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
