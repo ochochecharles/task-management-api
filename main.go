@@ -83,6 +83,7 @@ func main() {
 		r.Delete("/projects/{id}/tasks/{taskID}", taskHandler.DeleteTask)
 
 		r.Delete("/users/me", userHandler.DeleteUser)
+		r.Get("/users/me", userHandler.GetMe)
 	})
 
 	port := os.Getenv("PORT")

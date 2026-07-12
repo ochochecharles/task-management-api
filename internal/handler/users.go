@@ -3,6 +3,7 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/ochochecharles/task-management-api/internal/db"
@@ -36,4 +37,32 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
+	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.queries.GetUserByID(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	var avatarURL *string
+	if user.AvatarUrl.Valid {
+		avatarURL = &user.AvatarUrl.String
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(UserResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		AvatarURL: avatarURL,
+		CreatedAt: user.CreatedAt,
+	})
 }
