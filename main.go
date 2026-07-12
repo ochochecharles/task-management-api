@@ -81,6 +81,7 @@ func main() {
 		r.Get("/projects/{id}/tasks/{taskID}", taskHandler.GetTask)
 		r.Put("/projects/{id}/tasks/{taskID}", taskHandler.UpdateTask)
 		r.Delete("/projects/{id}/tasks/{taskID}", taskHandler.DeleteTask)
+		r.Patch("/projects/{id}/tasks/{taskID}/status", taskHandler.UpdateTaskStatus)
 
 		r.Delete("/users/me", userHandler.DeleteUser)
 		r.Get("/users/me", userHandler.GetMe)

@@ -23,6 +23,12 @@ SET title = $2, description = $3, status = $4, priority = $5, due_date = $6, ass
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateTaskStatus :one
+UPDATE tasks
+SET status = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteTask :exec
 DELETE FROM tasks
 WHERE id = $1;

@@ -116,9 +116,32 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusUnauthorized)
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid project id", http.StatusBadRequest)
+		return
+	}
+
 	taskID, err := uuid.Parse(chi.URLParam(r, "taskID"))
 	if err != nil {
 		http.Error(w, "invalid task id", http.StatusBadRequest)
+		return
+	}
+
+	_, role, err := h.getTaskAndCheckAccess(r, taskID, userID, projectID)
+	if err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+
+	if role != "creator" {
+		http.Error(w, "only the task creator can update this task", http.StatusForbidden)
 		return
 	}
 
@@ -161,9 +184,32 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
+	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusUnauthorized)
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid project id", http.StatusBadRequest)
+		return
+	}
+
 	taskID, err := uuid.Parse(chi.URLParam(r, "taskID"))
 	if err != nil {
 		http.Error(w, "invalid task id", http.StatusBadRequest)
+		return
+	}
+
+	_, role, err := h.getTaskAndCheckAccess(r, taskID, userID, projectID)
+	if err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+
+	if role != "creator" && role != "owner" {
+		http.Error(w, "only the task creator or project owner can delete this task", http.StatusForbidden)
 		return
 	}
 
@@ -174,6 +220,64 @@ func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *TaskHandler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
+	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusUnauthorized)
+		return
+	}
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid project id", http.StatusBadRequest)
+		return
+	}
+
+	taskID, err := uuid.Parse(chi.URLParam(r, "taskID"))
+	if err != nil {
+		http.Error(w, "invalid task id", http.StatusBadRequest)
+		return
+	}
+
+	_, role, err := h.getTaskAndCheckAccess(r, taskID, userID, projectID)
+	if err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+
+	if role != "assignee" && role != "creator" {
+		http.Error(w, "only the assignee or task creator can update the status", http.StatusForbidden)
+		return
+	}
+
+	var body struct {
+		Status string `json:"status"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if body.Status == "" {
+		http.Error(w, "status is required", http.StatusBadRequest)
+		return
+	}
+
+	task, err := h.queries.UpdateTaskStatus(r.Context(), db.UpdateTaskStatusParams{
+		ID:     taskID,
+		Status: body.Status,
+	})
+	if err != nil {
+		slog.Error("failed to update task status", "error", err)
+		http.Error(w, "failed to update task status", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(toTaskResponse(task))
 }
 
 // helper functions for nullable types
@@ -204,4 +308,30 @@ func nullableUUID(s *string) uuid.NullUUID {
 		return uuid.NullUUID{}
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
+// authorization helper
+func (h *TaskHandler) getTaskAndCheckAccess(r *http.Request, taskID uuid.UUID, userID uuid.UUID, projectID uuid.UUID) (db.Task, string, error) {
+	task, err := h.queries.GetTaskByID(r.Context(), taskID)
+	if err != nil {
+		return db.Task{}, "", err
+	}
+
+	if task.CreatedBy == userID {
+		return task, "creator", nil
+	}
+
+	member, err := h.queries.GetProjectMember(r.Context(), db.GetProjectMemberParams{
+		ProjectID: projectID,
+		UserID:    userID,
+	})
+	if err == nil && member.Role == "owner" {
+		return task, "owner", nil
+	}
+
+	if task.AssignedTo.Valid && task.AssignedTo.UUID == userID {
+		return task, "assignee", nil
+	}
+
+	return task, "member", nil
 }
