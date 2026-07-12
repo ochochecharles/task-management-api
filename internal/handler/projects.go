@@ -20,6 +20,17 @@ func NewProjectHandler(queries *db.Queries) *ProjectHandler {
 	return &ProjectHandler{queries: queries}
 }
 
+func (h *ProjectHandler) isOwner(r *http.Request, projectID uuid.UUID, userID uuid.UUID) (bool, error) {
+	member, err := h.queries.GetProjectMember(r.Context(), db.GetProjectMemberParams{
+		ProjectID: projectID,
+		UserID:    userID,
+	})
+	if err != nil {
+		return false, err
+	}
+	return member.Role == "owner", nil
+}
+
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
 	if err != nil {
@@ -117,6 +128,18 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusUnauthorized)
+		return
+	}
+
+	ok, err := h.isOwner(r, projectID, userID)
+	if err != nil || !ok {
+		http.Error(w, "only the project owner can perform this action", http.StatusForbidden)
+		return
+	}
+
 	var body struct {
 		Name        string  `json:"name"`
 		Description *string `json:"description"`
@@ -158,6 +181,18 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusUnauthorized)
+		return
+	}
+
+	ok, err := h.isOwner(r, projectID, userID)
+	if err != nil || !ok {
+		http.Error(w, "only the project owner can perform this action", http.StatusForbidden)
+		return
+	}
+
 	if err := h.queries.DeleteProject(r.Context(), projectID); err != nil {
 		slog.Error("failed to delete project", "error", err)
 		http.Error(w, "failed to delete project", http.StatusInternalServerError)
@@ -171,6 +206,18 @@ func (h *ProjectHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid project id", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusUnauthorized)
+		return
+	}
+
+	ok, err := h.isOwner(r, projectID, userID)
+	if err != nil || !ok {
+		http.Error(w, "only the project owner can perform this action", http.StatusForbidden)
 		return
 	}
 
@@ -240,6 +287,18 @@ func (h *ProjectHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid project id", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := uuid.Parse(r.Context().Value(middleware.UserIDKey).(string))
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusUnauthorized)
+		return
+	}
+
+	ok, err := h.isOwner(r, projectID, userID)
+	if err != nil || !ok {
+		http.Error(w, "only the project owner can perform this action", http.StatusForbidden)
 		return
 	}
 
