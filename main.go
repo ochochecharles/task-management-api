@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/pressly/goose/v3"	
 
 	"github.com/ochochecharles/task-management-api/internal/db"
 	"github.com/ochochecharles/task-management-api/internal/handler"
@@ -35,6 +36,17 @@ func main() {
 
 	slog.Info("database connection established")
 
+	goose.SetBaseFS(db.MigrationsFS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		slog.Error("failed to set goose dialect", "error", err)
+		os.Exit(1)
+	}
+	if err := goose.Up(conn, "migrations"); err != nil {
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("migrations applied successfully")
+
 	queries := db.New(conn)
 
 	authHandler := handler.NewAuthHandler(queries)
@@ -46,7 +58,7 @@ func main() {
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{os.Getenv("FRONTEND_URL")},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: false,
 		MaxAge:           300,
