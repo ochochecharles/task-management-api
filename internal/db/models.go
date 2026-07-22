@@ -11,6 +11,17 @@ import (
 	"github.com/google/uuid"
 )
 
+type Notification struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Type       string
+	Message    string
+	EntityType string
+	EntityID   uuid.UUID
+	ReadAt     sql.NullTime
+	CreatedAt  time.Time
+}
+
 type Project struct {
 	ID          uuid.UUID
 	Name        string

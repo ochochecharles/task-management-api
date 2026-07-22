@@ -9,16 +9,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/ochochecharles/task-management-api/internal/notification"
 	"github.com/ochochecharles/task-management-api/internal/db"
 	"github.com/ochochecharles/task-management-api/internal/middleware"
 )
 
 type TaskHandler struct {
-	queries *db.Queries
+	queries  *db.Queries
+	notifier *notification.Service
 }
 
-func NewTaskHandler(queries *db.Queries) *TaskHandler {
-	return &TaskHandler{queries: queries}
+func NewTaskHandler(queries *db.Queries, notifier *notification.Service) *TaskHandler {
+	return &TaskHandler{queries: queries, notifier: notifier}
 }
 
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +58,12 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		body.Priority = "medium"
 	}
 
+	assignedTo, err := nullableUUID(body.AssignedTo)
+	if err != nil {
+		http.Error(w, "invalid assigned_to id", http.StatusBadRequest)
+		return
+	}
+
 	task, err := h.queries.CreateTask(r.Context(), db.CreateTaskParams{
 		ProjectID:   projectID,
 		Title:       body.Title,
@@ -63,12 +71,19 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		Priority:    body.Priority,
 		DueDate:     nullableDate(body.DueDate),
 		CreatedBy:   userID,
-		AssignedTo:  nullableUUID(body.AssignedTo),
+		AssignedTo:  assignedTo,
 	})
 	if err != nil {
 		slog.Error("failed to create task", "error", err)
 		http.Error(w, "failed to create task", http.StatusInternalServerError)
 		return
+	}
+
+	// notify the assignee, if one was set at creation
+	if task.AssignedTo.Valid {
+		if err := h.notifier.TaskAssigned(r.Context(), task.AssignedTo.UUID, task.ID, task.Title); err != nil {
+			slog.Error("failed to create notification", "error", err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -134,7 +149,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, role, err := h.getTaskAndCheckAccess(r, taskID, userID, projectID)
+	existingTask, role, err := h.getTaskAndCheckAccess(r, taskID, userID, projectID)
 	if err != nil {
 		http.Error(w, "task not found", http.StatusNotFound)
 		return
@@ -164,6 +179,12 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	assignedTo, err := nullableUUID(body.AssignedTo)
+	if err != nil {
+		http.Error(w, "invalid assigned_to id", http.StatusBadRequest)
+		return
+	}
+
 	task, err := h.queries.UpdateTask(r.Context(), db.UpdateTaskParams{
 		ID:          taskID,
 		Title:       body.Title,
@@ -171,12 +192,21 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		Status:      body.Status,
 		Priority:    body.Priority,
 		DueDate:     nullableDate(body.DueDate),
-		AssignedTo:  nullableUUID(body.AssignedTo),
+		AssignedTo:  assignedTo,
 	})
+
 	if err != nil {
 		slog.Error("failed to update task", "error", err)
 		http.Error(w, "failed to update task", http.StatusInternalServerError)
 		return
+	}
+
+	// notify only if the assignee actually changed to a new, non-null user
+	if task.AssignedTo.Valid &&
+		(!existingTask.AssignedTo.Valid || existingTask.AssignedTo.UUID != task.AssignedTo.UUID) {
+		if err := h.notifier.TaskAssigned(r.Context(), task.AssignedTo.UUID, task.ID, task.Title); err != nil {
+			slog.Error("failed to create notification", "error", err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -241,7 +271,7 @@ func (h *TaskHandler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, role, err := h.getTaskAndCheckAccess(r, taskID, userID, projectID)
+	existingTask, role, err := h.getTaskAndCheckAccess(r, taskID, userID, projectID)
 	if err != nil {
 		http.Error(w, "task not found", http.StatusNotFound)
 		return
@@ -276,6 +306,26 @@ func (h *TaskHandler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// notify whichever of creator/assignee did NOT make this change
+	if task.Status != existingTask.Status {
+		var recipientID uuid.UUID
+		var notify bool
+
+		if role == "creator" && task.AssignedTo.Valid {
+			recipientID = task.AssignedTo.UUID
+			notify = true
+		} else if role == "assignee" {
+			recipientID = task.CreatedBy
+			notify = true
+		}
+
+		if notify {
+			if err := h.notifier.TaskStatusChanged(r.Context(), recipientID, task.ID, task.Title, task.Status); err != nil {
+				slog.Error("failed to create notification", "error", err)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(toTaskResponse(task))
 }
@@ -299,15 +349,15 @@ func nullableDate(s *string) sql.NullTime {
 	return sql.NullTime{Time: t, Valid: true}
 }
 
-func nullableUUID(s *string) uuid.NullUUID {
+func nullableUUID(s *string) (uuid.NullUUID, error) {
 	if s == nil {
-		return uuid.NullUUID{}
+		return uuid.NullUUID{}, nil
 	}
 	id, err := uuid.Parse(*s)
 	if err != nil {
-		return uuid.NullUUID{}
+		return uuid.NullUUID{}, err
 	}
-	return uuid.NullUUID{UUID: id, Valid: true}
+	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
 // authorization helper

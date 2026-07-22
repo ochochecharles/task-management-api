@@ -12,6 +12,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pressly/goose/v3"	
 
+	"github.com/ochochecharles/task-management-api/internal/notification"
 	"github.com/ochochecharles/task-management-api/internal/db"
 	"github.com/ochochecharles/task-management-api/internal/handler"
 	"github.com/ochochecharles/task-management-api/internal/middleware"
@@ -51,8 +52,10 @@ func main() {
 
 	authHandler := handler.NewAuthHandler(queries)
 	projectHandler := handler.NewProjectHandler(queries)
-	taskHandler := handler.NewTaskHandler(queries)
+	notifier := notification.NewService(queries)
+	taskHandler := handler.NewTaskHandler(queries, notifier)
 	userHandler := handler.NewUserHandler(queries)
+	notificationHandler := handler.NewNotificationHandler(queries)
 
 	r := chi.NewRouter()
 
@@ -94,6 +97,13 @@ func main() {
 		r.Put("/projects/{id}/tasks/{taskID}", taskHandler.UpdateTask)
 		r.Delete("/projects/{id}/tasks/{taskID}", taskHandler.DeleteTask)
 		r.Patch("/projects/{id}/tasks/{taskID}/status", taskHandler.UpdateTaskStatus)
+
+		r.Get("/notifications", notificationHandler.ListNotifications)
+		r.Get("/notifications/unread-count", notificationHandler.UnreadCount)
+		r.Patch("/notifications/{id}/read", notificationHandler.MarkRead)
+		r.Patch("/notifications/read-all", notificationHandler.MarkAllRead)
+		r.Delete("/notifications/{id}", notificationHandler.DeleteNotification)
+		r.Delete("/notifications/read", notificationHandler.DeleteReadNotifications)
 
 		r.Delete("/users/me", userHandler.DeleteUser)
 		r.Get("/users/me", userHandler.GetMe)

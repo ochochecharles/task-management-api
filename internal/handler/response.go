@@ -49,6 +49,17 @@ type TaskResponse struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
+type NotificationResponse struct {
+	ID         uuid.UUID  `json:"id"`
+	Type       string     `json:"type"`
+	Message    string     `json:"message"`
+	EntityType string     `json:"entity_type"`
+	EntityID   uuid.UUID  `json:"entity_id"`
+	ReadAt     *time.Time `json:"read_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
+
 func toProjectResponse(p db.Project) ProjectResponse {
 	var description *string
 	if p.Description.Valid {
@@ -102,5 +113,22 @@ func toTaskResponse(t db.Task) TaskResponse {
 		AssignedTo:  assignedTo,
 		CreatedAt:   t.CreatedAt,
 		UpdatedAt:   t.UpdatedAt,
+	}
+}
+
+func toNotificationResponse(n db.Notification) NotificationResponse {
+	var readAt *time.Time
+	if n.ReadAt.Valid {
+		readAt = &n.ReadAt.Time
+	}
+
+	return NotificationResponse{
+		ID:         n.ID,
+		Type:       n.Type,
+		Message:    n.Message,
+		EntityType: n.EntityType,
+		EntityID:   n.EntityID,
+		ReadAt:     readAt,
+		CreatedAt:  n.CreatedAt,
 	}
 }
